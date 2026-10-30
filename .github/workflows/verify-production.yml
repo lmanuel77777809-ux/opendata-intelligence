@@ -3,7 +3,7 @@ name: Verificar producción (Supabase)
 # Comprobaciones de solo lectura sobre el proyecto Supabase:
 #  1. Conteos por indicador y 20 valores al azar frente a la API del Banco Mundial.
 #  2. Contrato REST contra la API publicada (/rest/v1) con la clave publicable.
-# Secreto: SUPABASE_DB_URL. Variable: SUPABASE_PUBLISHABLE_KEY. Solo se lanza a mano.
+# Configuración: la misma que el despliegue (scripts/supabase-config.mjs). Solo se lanza a mano.
 
 on:
   workflow_dispatch:
@@ -15,16 +15,14 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - name: ¿Hay proyecto configurado?
         id: cfg
         env:
-          HAS_DB: ${{ secrets.SUPABASE_DB_URL != '' }}
+          HAS_DB: ${{ (secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_DB_PASSWORD != '') || secrets.SUPABASE_DB_URL != '' }}
         run: |
           if [ "$HAS_DB" != "true" ]; then
-            echo "::notice title=Verificación omitida::Falta el secreto SUPABASE_DB_URL"
+            echo "::notice title=Verificación omitida::Faltan los secretos de Supabase"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -40,23 +38,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.cfg.outputs.skip == 'false'
-      - name: Configuración derivada
+      - name: Configuración de Supabase
         if: steps.cfg.outputs.skip == 'false'
         env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: node scripts/supabase-config.mjs
       - name: Datos frente a la API del Banco Mundial
         if: steps.cfg.outputs.skip == 'false'
-        env:
-          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           mkdir -p out
-          pnpm --silent exec tsx apps/worker/src/verify-worldbank.ts > out/verify.json
+          DATABASE_URL="$SUPABASE_DB_URL" pnpm --silent exec tsx apps/worker/src/verify-worldbank.ts > out/verify.json
       - name: Contrato REST contra Supabase
         if: always() && steps.cfg.outputs.skip == 'false'
         run: |
-          if [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
-            echo "::error title=Contrato REST::Falta la variable SUPABASE_PUBLISHABLE_KEY"
+          if [ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error title=Contrato REST::Sin clave publicable (token de Supabase o variable SUPABASE_PUBLISHABLE_KEY)"
             exit 1
           fi
           set +e

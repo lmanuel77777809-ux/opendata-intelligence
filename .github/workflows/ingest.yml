@@ -1,10 +1,9 @@
 name: Ingesta programada
 
-# Cada día ejecuta los datasets vencidos según su propia frecuencia (ops.due_datasets).
-# Secretos: SUPABASE_DB_URL (cadena "Session pooler") e INGEST_WRITER_PASSWORD; con ellos se
-# deriva la conexión del rol ingest_writer. También vale un INGEST_DATABASE_URL explícito.
-# Variable opcional: ODI_CONTACT (contacto para el User-Agent).
-# Sin secretos, el workflow termina sin hacer nada.
+# Cada día ejecuta los datasets vencidos según su propia frecuencia (ops.due_datasets), con el rol
+# ingest_writer. Configuración: la misma que el despliegue (scripts/supabase-config.mjs), o un
+# secreto INGEST_DATABASE_URL explícito. Variable opcional: ODI_CONTACT (contacto del User-Agent).
+# Sin configuración, el workflow termina sin hacer nada.
 
 on:
   schedule:
@@ -34,10 +33,10 @@ jobs:
       - name: ¿Hay base configurada?
         id: cfg
         env:
-          HAS_URL: ${{ secrets.INGEST_DATABASE_URL != '' || (secrets.SUPABASE_DB_URL != '' && secrets.INGEST_WRITER_PASSWORD != '') }}
+          HAS_CFG: ${{ secrets.INGEST_DATABASE_URL != '' || (secrets.INGEST_WRITER_PASSWORD != '' && ((secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_DB_PASSWORD != '') || secrets.SUPABASE_DB_URL != '')) }}
         run: |
-          if [ "$HAS_URL" != "true" ]; then
-            echo "::notice title=Ingesta omitida::Faltan los secretos SUPABASE_DB_URL e INGEST_WRITER_PASSWORD"
+          if [ "$HAS_CFG" != "true" ]; then
+            echo "::notice title=Ingesta omitida::Faltan los secretos de Supabase o INGEST_WRITER_PASSWORD"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -57,14 +56,16 @@ jobs:
         if: steps.cfg.outputs.skip == 'false'
         env:
           EXPLICIT_URL: ${{ secrets.INGEST_DATABASE_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
           if [ -n "$EXPLICIT_URL" ]; then
             echo "DATABASE_URL=$EXPLICIT_URL" >> "$GITHUB_ENV"
           else
-            node scripts/supabase-config.mjs
-            echo "DATABASE_URL=$(grep '^INGEST_DATABASE_URL=' "$GITHUB_ENV" | tail -1 | cut -d= -f2-)" >> "$GITHUB_ENV"
+            node scripts/supabase-config.mjs --ingest
           fi
       - name: Ingesta
         if: steps.cfg.outputs.skip == 'false'

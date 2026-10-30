@@ -1,12 +1,11 @@
 name: Desplegar base de datos (Supabase)
 
-# Aplica las migraciones pendientes en el proyecto Supabase y comprueba la API publicada.
-# Secretos (Settings > Secrets and variables > Actions):
-#   SUPABASE_DB_URL          cadena "Session pooler" (puerto 5432), usuario postgres.<ref>
-#   INGEST_WRITER_PASSWORD   contraseña del rol ingest_writer
-# Variable:
-#   SUPABASE_PUBLISHABLE_KEY clave publicable (no es secreta: es la que usan Excel y la web)
-# La URL del proyecto se deriva de SUPABASE_DB_URL. Sin SUPABASE_DB_URL no hace nada.
+# Aplica las migraciones pendientes en el proyecto Supabase, habilita el rol de ingesta y
+# comprueba la API publicada. Configuración (Settings > Secrets and variables > Actions):
+#   Vía automática: secretos SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD e INGEST_WRITER_PASSWORD.
+#     Además publica el esquema api en la Data API.
+#   Vía manual: secretos SUPABASE_DB_URL e INGEST_WRITER_PASSWORD; variable SUPABASE_PUBLISHABLE_KEY.
+# Ver scripts/supabase-config.mjs. Sin configuración, el workflow termina sin hacer nada.
 
 # Solo manual: ningún cambio de esquema llega a producción sin que alguien lo lance.
 on:
@@ -23,25 +22,30 @@ jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - name: ¿Hay proyecto configurado?
         id: cfg
+        env:
+          HAS_CFG: ${{ (secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_DB_PASSWORD != '') || secrets.SUPABASE_DB_URL != '' }}
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::notice title=Despliegue omitido::Falta el secreto SUPABASE_DB_URL"
+          if [ "$HAS_CFG" != "true" ]; then
+            echo "::notice title=Despliegue omitido::Faltan los secretos de Supabase (SUPABASE_ACCESS_TOKEN y SUPABASE_DB_PASSWORD, o SUPABASE_DB_URL)"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
         if: steps.cfg.outputs.skip == 'false'
-      - name: Configuración derivada (URL del proyecto)
+      - name: Configuración de Supabase (y esquema api expuesto)
         if: steps.cfg.outputs.skip == 'false'
-        run: node scripts/supabase-config.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: node scripts/supabase-config.mjs --ensure-api-schema
       - name: Migraciones pendientes
         if: steps.cfg.outputs.skip == 'false'
         run: |
@@ -49,8 +53,14 @@ jobs:
           echo "$out"
           echo "::notice title=Migraciones::$(echo "$out" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')"
       - name: Contraseña del rol de ingesta
-        if: steps.cfg.outputs.skip == 'false' && env.INGEST_WRITER_PASSWORD != ''
+        if: steps.cfg.outputs.skip == 'false'
+        env:
+          INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
         run: |
+          if [ -z "$INGEST_WRITER_PASSWORD" ]; then
+            echo "::warning title=ingest_writer::Falta el secreto INGEST_WRITER_PASSWORD: la ingesta no podrá conectarse"
+            exit 0
+          fi
           printf "alter role ingest_writer login password :'pw';\n" \
             | psql -X -q -v ON_ERROR_STOP=1 -v pw="$INGEST_WRITER_PASSWORD" "$SUPABASE_DB_URL"
           echo "::notice title=ingest_writer::Rol de ingesta habilitado para iniciar sesión"
@@ -67,16 +77,21 @@ jobs:
       - name: Comprobación de la API publicada
         if: steps.cfg.outputs.skip == 'false'
         run: |
-          if [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
-            echo "::warning title=API publicada::Falta la variable SUPABASE_PUBLISHABLE_KEY: no se comprueba la API"
+          if [ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
+            echo "::warning title=API publicada::Sin clave publicable: no se comprueba la API"
             exit 0
           fi
-          code=$(curl -s -o body.json -w '%{http_code}' "$SUPABASE_URL/rest/v1/v_source?select=source_code,status" \
-            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Accept-Profile: api")
+          # Tras cambiar los esquemas expuestos, la Data API tarda unos segundos en recargarse.
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            code=$(curl -s -o body.json -w '%{http_code}' "$SUPABASE_URL/rest/v1/v_source?select=source_code,status" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Accept-Profile: api")
+            [ "$code" = "406" ] || break
+            sleep 10
+          done
           if [ "$code" = "200" ]; then
             echo "::notice title=API publicada::HTTP 200 en /rest/v1/v_source: $(head -c 300 body.json)"
           elif [ "$code" = "406" ]; then
-            echo "::error title=API publicada::HTTP 406: el esquema api no está expuesto. Supabase > Project Settings > Data API > Exposed schemas: añadir api"
+            echo "::error title=API publicada::HTTP 406: el esquema api no está expuesto (Project Settings > Data API > Exposed schemas)"
             exit 1
           else
             echo "::error title=API publicada::HTTP $code: $(head -c 300 body.json)"
