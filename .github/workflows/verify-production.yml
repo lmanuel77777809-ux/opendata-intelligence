@@ -1,0 +1,76 @@
+name: Verificar producción (Supabase)
+
+# Comprobaciones de solo lectura sobre el proyecto Supabase:
+#  1. Conteos por indicador y 20 valores al azar frente a la API del Banco Mundial.
+#  2. Contrato REST contra la API publicada (/rest/v1) con la clave publicable.
+# Secreto: SUPABASE_DB_URL. Variable: SUPABASE_PUBLISHABLE_KEY. Solo se lanza a mano.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - name: ¿Hay proyecto configurado?
+        id: cfg
+        env:
+          HAS_DB: ${{ secrets.SUPABASE_DB_URL != '' }}
+        run: |
+          if [ "$HAS_DB" != "true" ]; then
+            echo "::notice title=Verificación omitida::Falta el secreto SUPABASE_DB_URL"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip == 'false'
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.skip == 'false'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.skip == 'false'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.cfg.outputs.skip == 'false'
+      - name: Configuración derivada
+        if: steps.cfg.outputs.skip == 'false'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/supabase-config.mjs
+      - name: Datos frente a la API del Banco Mundial
+        if: steps.cfg.outputs.skip == 'false'
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p out
+          pnpm --silent exec tsx apps/worker/src/verify-worldbank.ts > out/verify.json
+      - name: Contrato REST contra Supabase
+        if: always() && steps.cfg.outputs.skip == 'false'
+        run: |
+          if [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error title=Contrato REST::Falta la variable SUPABASE_PUBLISHABLE_KEY"
+            exit 1
+          fi
+          set +e
+          API_URL="$SUPABASE_URL/rest/v1" API_KEY="$SUPABASE_PUBLISHABLE_KEY" API_FIXTURE=real \
+            PAGING_INDICATOR=worldbank:NY.GDP.MKTP.CD PAGING_GEO=ESP PAGE_SIZE=1000 \
+            pnpm test:api --reporter=default --reporter=github-actions --reporter=json --outputFile=out/api-tests.json
+          code=$?
+          set -e
+          jq -r '"\(.numPassedTests) superadas, \(.numFailedTests) fallidas, \(.numPendingTests) omitidas de \(.numTotalTests)"' out/api-tests.json \
+            | xargs -I{} echo "::notice title=Contrato API REST (Supabase)::{}"
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.cfg.outputs.skip == 'false'
+        with:
+          name: verify-production-${{ github.run_id }}
+          path: out/
+          retention-days: 30

@@ -1,15 +1,14 @@
 /**
- * Verificación independiente de una carga real del Banco Mundial.
- * Se ejecuta después de `pnpm ingest run` sobre una base de pruebas (nunca sobre producción:
- * aprueba la fuente y publica los datasets para medir la API como `anon`).
+ * Verificación independiente de una carga real del Banco Mundial. Solo lectura: se puede
+ * ejecutar contra la base de pruebas de CI o contra producción (Supabase).
  *
  *  1. Conteo por indicador: filas en base frente a valores no nulos que publica la API
  *     (descarga propia, por otro camino que el conector).
  *  2. 20 observaciones al azar comparadas una a una con la API.
  *  3. Tiempo de api.get_series como anon (mediana de 5).
  *
- * Variables: DATABASE_URL (superusuario de la base de pruebas). Salida: JSON en stdout y
- * anotaciones ::notice:: para GitHub Actions.
+ * Variables: DATABASE_URL (usuario con lectura de core, ref y ops y que pueda asumir anon).
+ * Salida: JSON en stdout y anotaciones ::notice:: para GitHub Actions.
  */
 import pg from 'pg';
 import { HttpClient } from '@odi/connector-sdk';
@@ -97,9 +96,7 @@ async function main() {
     checks.map((c) => `${c.match ? 'OK ' : 'DIF'} ${c.indicator} ${c.geo} ${c.year}: base ${c.value} | API ${c.api}`),
   );
 
-  // 3. Rendimiento como anon (solo en esta base de pruebas: se aprueba y publica para poder medir).
-  await q(`update meta.source set status = 'approved' where code = 'worldbank'`);
-  await q(`update meta.dataset set is_public = true where code like 'worldbank:%'`);
+  // 3. Rendimiento como anon (la fuente y los datasets ya están aprobados y publicados por migración).
   const client = await db.connect();
   const measure = async (sql: string) => {
     const times: number[] = [];

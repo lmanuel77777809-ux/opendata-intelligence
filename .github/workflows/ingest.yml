@@ -1,9 +1,10 @@
 name: Ingesta programada
 
 # Cada día ejecuta los datasets vencidos según su propia frecuencia (ops.due_datasets).
-# Secreto: INGEST_DATABASE_URL (rol ingest_writer, por el pooler de Supabase en modo sesión).
+# Secretos: SUPABASE_DB_URL (cadena "Session pooler") e INGEST_WRITER_PASSWORD; con ellos se
+# deriva la conexión del rol ingest_writer. También vale un INGEST_DATABASE_URL explícito.
 # Variable opcional: ODI_CONTACT (contacto para el User-Agent).
-# Sin el secreto, el workflow termina sin hacer nada.
+# Sin secretos, el workflow termina sin hacer nada.
 
 on:
   schedule:
@@ -27,15 +28,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      DATABASE_URL: ${{ secrets.INGEST_DATABASE_URL }}
       ODI_CONTACT: ${{ vars.ODI_CONTACT }}
       DATASET: ${{ inputs.dataset }}
     steps:
       - name: ¿Hay base configurada?
         id: cfg
+        env:
+          HAS_URL: ${{ secrets.INGEST_DATABASE_URL != '' || (secrets.SUPABASE_DB_URL != '' && secrets.INGEST_WRITER_PASSWORD != '') }}
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::notice title=Ingesta omitida::Falta el secreto INGEST_DATABASE_URL"
+          if [ "$HAS_URL" != "true" ]; then
+            echo "::notice title=Ingesta omitida::Faltan los secretos SUPABASE_DB_URL e INGEST_WRITER_PASSWORD"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -51,6 +53,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.cfg.outputs.skip == 'false'
+      - name: Conexión del rol de ingesta
+        if: steps.cfg.outputs.skip == 'false'
+        env:
+          EXPLICIT_URL: ${{ secrets.INGEST_DATABASE_URL }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
+        run: |
+          if [ -n "$EXPLICIT_URL" ]; then
+            echo "DATABASE_URL=$EXPLICIT_URL" >> "$GITHUB_ENV"
+          else
+            node scripts/supabase-config.mjs
+            echo "DATABASE_URL=$(grep '^INGEST_DATABASE_URL=' "$GITHUB_ENV" | tail -1 | cut -d= -f2-)" >> "$GITHUB_ENV"
+          fi
       - name: Ingesta
         if: steps.cfg.outputs.skip == 'false'
         run: |

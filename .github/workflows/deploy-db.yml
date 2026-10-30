@@ -2,12 +2,11 @@ name: Desplegar base de datos (Supabase)
 
 # Aplica las migraciones pendientes en el proyecto Supabase y comprueba la API publicada.
 # Secretos (Settings > Secrets and variables > Actions):
-#   SUPABASE_DB_URL          cadena de conexión del pooler (modo sesión, puerto 5432), usuario postgres
-#   INGEST_WRITER_PASSWORD   opcional: contraseña del rol ingest_writer
-# Variables (pestaña Variables):
-#   SUPABASE_URL             https://<ref>.supabase.co
+#   SUPABASE_DB_URL          cadena "Session pooler" (puerto 5432), usuario postgres.<ref>
+#   INGEST_WRITER_PASSWORD   contraseña del rol ingest_writer
+# Variable:
 #   SUPABASE_PUBLISHABLE_KEY clave publicable (no es secreta: es la que usan Excel y la web)
-# Sin SUPABASE_DB_URL el workflow termina sin hacer nada.
+# La URL del proyecto se deriva de SUPABASE_DB_URL. Sin SUPABASE_DB_URL no hace nada.
 
 # Solo manual: ningún cambio de esquema llega a producción sin que alguien lo lance.
 on:
@@ -27,7 +26,6 @@ jobs:
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - name: ¿Hay proyecto configurado?
@@ -41,6 +39,9 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.cfg.outputs.skip == 'false'
+      - name: Configuración derivada (URL del proyecto)
+        if: steps.cfg.outputs.skip == 'false'
+        run: node scripts/supabase-config.mjs
       - name: Migraciones pendientes
         if: steps.cfg.outputs.skip == 'false'
         run: |
@@ -64,8 +65,12 @@ jobs:
           SQL
           echo "::notice title=Estado de la base::$(sed -e 's/%/%25/g' check.txt | awk 'BEGIN{ORS="%0A"} {print}')"
       - name: Comprobación de la API publicada
-        if: steps.cfg.outputs.skip == 'false' && env.SUPABASE_URL != '' && env.SUPABASE_PUBLISHABLE_KEY != ''
+        if: steps.cfg.outputs.skip == 'false'
         run: |
+          if [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::warning title=API publicada::Falta la variable SUPABASE_PUBLISHABLE_KEY: no se comprueba la API"
+            exit 0
+          fi
           code=$(curl -s -o body.json -w '%{http_code}' "$SUPABASE_URL/rest/v1/v_source?select=source_code,status" \
             -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Accept-Profile: api")
           if [ "$code" = "200" ]; then
