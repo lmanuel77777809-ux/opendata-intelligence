@@ -116,9 +116,13 @@ jobs:
           PAGING_GEO: ESP
           PAGE_SIZE: '1000'
         run: |
-          pnpm test:api --reporter=default --reporter=json --outputFile=out/api-tests.json
+          set +e
+          pnpm test:api --reporter=default --reporter=github-actions --reporter=json --outputFile=out/api-tests.json
+          code=$?
+          set -e
           jq -r '"\(.numPassedTests) superadas, \(.numFailedTests) fallidas, \(.numPendingTests) omitidas de \(.numTotalTests)"' out/api-tests.json \
             | xargs -I{} echo "::notice title=Contrato API REST (datos reales)::{}"
+          exit $code
       - uses: actions/upload-artifact@v4
         if: always()
         with:

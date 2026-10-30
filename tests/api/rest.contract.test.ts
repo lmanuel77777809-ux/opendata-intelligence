@@ -107,7 +107,9 @@ describe.skipIf(!API_URL)('API REST (PostgREST, esquema api)', () => {
     const rows = body as Array<{ indicator_key: string; year: number; value: number; license_code: string }>;
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.indicator_key === PAGING_INDICATOR && r.year >= 2000 && r.year <= 2004 && r.license_code)).toBe(true);
-    expect(Number(res.headers.get('content-range')!.split('/')[1])).toBe(rows.length);
+    // La primera página trae min(total, 1000) filas; con datos reales el total puede superar 1000.
+    const total = Number(res.headers.get('content-range')!.split('/')[1]);
+    expect(rows.length).toBe(Math.min(total, 1000));
   });
 
   it('get_series por RPC (GET y POST) devuelve la serie ordenada', async () => {
