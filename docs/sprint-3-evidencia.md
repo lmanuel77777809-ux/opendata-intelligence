@@ -17,7 +17,7 @@ la primera ejecución programada.
 | S3-6 Verificación de datos | Conteo por indicador: 12 de 12 iguales a la API; muestra al azar: 20 de 20 iguales | [41091004238](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091004238) |
 | S3-7 Segunda carga | `wdi-economy`: 0 nuevas, 0 modificadas, 76.994 iguales; `wdi-demography`: 0 nuevas, 0 modificadas, 86.531 iguales | [41091123125](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091123125) · [41091140937](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091140937) |
 | S3-8 Contrato REST en Supabase | 8 superadas, 0 fallidas, 2 omitidas por diseño (una solo para datos sintéticos; otra solo para PostgREST local) | [41091004238](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091004238) |
-| S3-9 Excel / Power BI | Excel (Microsoft 365, Windows), consulta `PruebaRapida.pq` contra Supabase con la clave publicable y acceso anónimo: 250 filas, 6 columnas (PIB y población de ARG, COL, ESP, MEX y USA, 2000–2024). Pendientes: el modelo completo, la actualización y Power BI | Captura del usuario, 2026-10-30 |
+| S3-9 Excel / Power BI | Excel (Microsoft 365, Windows), consulta `PruebaRapida.pq` contra Supabase con la clave publicable y acceso anónimo: 250 filas, 6 columnas (PIB y población de ARG, COL, ESP, MEX y USA, 2000–2024), cargadas en hoja; **Actualizar todo** funciona. Pendientes: el modelo completo y Power BI | Captura del usuario, 2026-10-30 |
 | S3-10 Ejecución programada | **Pendiente**: primera a las 05:17 UTC del 2026-10-31 | — |
 
 ## Rendimiento en Supabase
