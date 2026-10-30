@@ -68,6 +68,22 @@ jobs:
           jq -r '"\(.numPassedTests) superadas, \(.numFailedTests) fallidas, \(.numPendingTests) omitidas de \(.numTotalTests)"' out/api-tests.json \
             | xargs -I{} echo "::notice title=Contrato API REST (Supabase)::{}"
           exit $code
+      - name: Filas que deben traer las consultas de Excel/Power BI
+        if: always() && steps.cfg.outputs.skip == 'false' && env.SUPABASE_PUBLISHABLE_KEY != ''
+        run: |
+          # Total según la API (Prefer: count=exact) para las consultas de integrations/powerquery.
+          count() {
+            curl -sg -o /dev/null -D - "$SUPABASE_URL/rest/v1/$1&limit=1" \
+              -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Accept-Profile: api" -H "Prefer: count=exact" \
+              | tr -d '\r' | awk -F/ 'tolower($0) ~ /^content-range:/ {print $2}'
+          }
+          obs=$(count "v_observation?select=geo_code&indicator_key=in.(worldbank:NY.GDP.MKTP.CD,worldbank:SP.POP.TOTL,worldbank:SP.DYN.LE00.IN)&and=(year.gte.1990,year.lte.2025)")
+          quick=$(count "v_observation?select=geo_code&indicator_key=in.(worldbank:NY.GDP.MKTP.CD,worldbank:SP.POP.TOTL)&geo_code=in.(ESP,MEX,USA,COL,ARG)&and=(year.gte.2000,year.lte.2024)")
+          ind=$(count "v_indicator?select=indicator_key")
+          geo=$(count "v_geo?select=geo_code")
+          src=$(count "v_source?select=source_code")
+          ds=$(count "v_dataset?select=dataset_code")
+          echo "::notice title=Filas esperadas en Excel/Power BI::PruebaRapida: $quick%0AObservaciones (por defecto): $obs%0AIndicadores: $ind%0AGeografias: $geo%0AFuentes: $src%0ADatasets: $ds"
       - uses: actions/upload-artifact@v4
         if: always() && steps.cfg.outputs.skip == 'false'
         with:
