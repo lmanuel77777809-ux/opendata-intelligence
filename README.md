@@ -4,9 +4,10 @@ Plataforma que centraliza datos históricos y actualizados procedentes **exclusi
 públicas, gratuitas y sin autenticación**, los guarda en PostgreSQL (Supabase) con historial de
 revisiones y los sirve a una aplicación web, Excel y Power BI a través de una API propia.
 
-Estado: **Sprint 2 en curso** (API pública, Excel/Power BI y despliegue en Supabase). Documentación:
+Estado: **en producción en Supabase** con los datos del Banco Mundial (Sprint 3). Documentación:
 [API](docs/api.md) · [Excel y Power BI](docs/excel-powerbi.md) · [Supabase](docs/supabase-setup.md) ·
 [evidencia Sprint 1](docs/sprint-1-evidencia.md) · [evidencia Sprint 2](docs/sprint-2-evidencia.md) ·
+[evidencia Sprint 3](docs/sprint-3-evidencia.md) ·
 [ADR-001](docs/adr/ADR-001-stack.md) · [ADR-002](docs/adr/ADR-002-modelo-de-lectura.md)
 
 ## Regla fundamental
