@@ -139,7 +139,7 @@ describe.skipIf(!DB_URL)('worker + PostgreSQL (API simulada)', () => {
     });
   });
 
-  it('lectura pública: solo tras aprobar la fuente y publicar el dataset', async () => {
+  it('lectura pública: el Banco Mundial aprobado se ve; un dataset retirado de publicación, no', async () => {
     const asAnon = async (sql: string, params: unknown[] = []) => {
       const client = await admin.connect();
       try {
@@ -152,10 +152,11 @@ describe.skipIf(!DB_URL)('worker + PostgreSQL (API simulada)', () => {
     };
     const series = `select geo_code, period_label, value::float, license_code
                     from api.get_series('worldbank:SP.POP.TOTL', array['ESP'], 2020, 2024)`;
-    expect(await asAnon(series)).toEqual([]);
-
-    await admin.query(`update meta.source set status = 'approved' where code = 'worldbank'`);
-    await admin.query(`update meta.dataset set is_public = true where code = $1`, [DATASET]);
+    // Aprobado y publicado por la migración 20261031000300.
     expect(await asAnon(series)).toEqual([{ geo_code: 'ESP', period_label: '2023', value: 1010, license_code: 'CC-BY-4.0' }]);
+
+    await admin.query(`update meta.dataset set is_public = false where code = $1`, [DATASET]);
+    expect(await asAnon(series)).toEqual([]);
+    await admin.query(`update meta.dataset set is_public = true where code = $1`, [DATASET]);
   });
 });

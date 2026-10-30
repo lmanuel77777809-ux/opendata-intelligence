@@ -30,17 +30,43 @@ $$;
 do $$
 declare n integer;
 begin
-  select count(*) into n from meta.source where code = 'worldbank' and status = 'candidate';
-  assert n = 1, 'falta la fuente worldbank en estado candidate';
-  select count(*) into n from meta.dataset where code like 'worldbank:%' and not is_public;
-  assert n = 2, 'se esperaban 2 datasets no públicos del Banco Mundial';
+  select count(*) into n from meta.source
+  where code = 'worldbank' and status = 'approved' and terms_reviewed_at = date '2026-10-31' and status_reason is not null;
+  assert n = 1, 'el Banco Mundial debía estar aprobado, con fecha de revisión y motivo';
+  select count(*) into n from meta.dataset where code like 'worldbank:%' and is_public;
+  assert n = 2, 'se esperaban 2 datasets públicos del Banco Mundial';
   select sum(jsonb_array_length(config -> 'indicators')) into n from meta.dataset where code like 'worldbank:%';
   assert n = 12, format('se esperaban 12 indicadores configurados, hay %s', n);
-  raise notice 'PASS semilla del Banco Mundial: fuente candidata, 2 datasets privados, 12 indicadores';
+  raise notice 'PASS Banco Mundial aprobado y publicado: 2 datasets públicos, 12 indicadores';
+
+  select count(*) into n from meta.catalog_change
+  where entity = 'source' and entity_code = 'worldbank' and old_value = 'candidate' and new_value = 'approved' and reason like 'Aprobada el 2026-10-31%';
+  assert n = 1, 'falta el registro de la aprobación del Banco Mundial';
+  select count(*) into n from meta.catalog_change
+  where entity = 'dataset' and entity_code like 'worldbank:%' and old_value = 'false' and new_value = 'true' and reason like 'Publicación aprobada%';
+  assert n = 2, 'falta el registro de la publicación de los 2 datasets';
+  raise notice 'PASS la aprobación y la publicación quedan registradas con motivo';
 end
 $$;
 
 \ir fixtures.sql
+
+-- El registro de cambios del catálogo anota decisiones nuevas y no se puede editar.
+do $$
+declare n integer;
+begin
+  set local odi.change_reason = 'prueba';
+  update meta.dataset set is_public = true where code = 'test:fixture';
+  select count(*) into n from meta.catalog_change where entity_code = 'test:fixture' and new_value = 'true' and reason = 'prueba';
+  assert n = 1, 'publicación de dataset no registrada';
+  begin
+    update meta.catalog_change set reason = 'manipulado';
+    raise exception 'debía fallar';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS cambios de catálogo registrados y registro inmutable';
+end
+$$;
 
 -- Endpoint con host fuera de la lista blanca.
 do $$

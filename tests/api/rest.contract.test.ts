@@ -57,7 +57,8 @@ describe.skipIf(!API_URL)('API REST (PostgREST, esquema api)', () => {
     expect(rows.every((r) => r.license_code)).toBe(true);
     if (SYNTHETIC) {
       expect(rows.map((r) => r.source_code)).toContain('test_source');
-      expect(rows.map((r) => r.source_code)).not.toContain('worldbank');
+      expect(rows.map((r) => r.source_code)).toContain('worldbank');
+      expect(rows.map((r) => r.source_code)).not.toContain('test_candidate');
     }
   });
 

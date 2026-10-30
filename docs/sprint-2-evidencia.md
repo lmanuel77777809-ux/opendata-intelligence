@@ -48,7 +48,7 @@ un rol de solo lectura, `api_reader`, y aplican ellas la regla de visibilidad co
 | --- | --- |
 | Tipos | Sin errores |
 | Unitarias | 40 de 40 (SDK 21, Banco Mundial 8, Power Query 11) |
-| SQL | 39 de 39 aserciones (4 nuevas sobre el modelo de lectura) |
+| SQL | 41 de 41 aserciones (modelo de lectura, aprobación registrada y registro de cambios inmutable) |
 | Integración worker + PostgreSQL | 9 de 9 |
 | Contrato REST, datos sintéticos | 9 de 9 |
 | Contrato REST, datos reales | 8 de 9 (1 omitida a propósito) |
@@ -74,9 +74,15 @@ un rol de solo lectura, `api_reader`, y aplican ellas la regla de visibilidad co
 | Workflow **Ingesta programada** | Listo (diario, 05:17 UTC); sin `INGEST_DATABASE_URL` termina sin hacer nada |
 | Guía de puesta en marcha | [supabase-setup.md](supabase-setup.md) |
 
+## Decisión registrada
+
+El 2026-10-31 el responsable del proyecto aprobó publicar el Banco Mundial. Queda en la migración
+`20261031000300_approve_worldbank.sql`, con la evidencia y la licencia (CC BY 4.0, atribución
+obligatoria), y en el nuevo registro `meta.catalog_change`, que guarda cada cambio de estado de
+una fuente o de publicación de un dataset con su motivo, fecha y autor, y no admite ediciones.
+
 ## Pendiente
 
 1. Crear el proyecto Supabase y sus secretos ([supabase-setup.md](supabase-setup.md)).
 2. Desplegar, cargar el Banco Mundial y repetir el contrato REST contra Supabase.
-3. Decidir la aprobación del Banco Mundial para publicarlo (se registrará como migración).
 4. Probar las consultas en Excel y Power BI ([excel-powerbi.md](excel-powerbi.md)).

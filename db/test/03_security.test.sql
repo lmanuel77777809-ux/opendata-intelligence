@@ -20,7 +20,7 @@ do $$
 begin
   assert (select count(*) from api.v_observation) = 0, 'anon no debía ver observaciones de datasets privados';
   assert (select count(*) from api.v_indicator) = 0, 'anon no debía ver indicadores privados';
-  assert (select count(*) from api.v_source where source_code in ('test_source', 'worldbank')) = 0,
+  assert (select count(*) from api.v_source where source_code = 'test_source') = 0,
     'anon no debía ver fuentes candidatas';
   raise notice 'PASS anon no ve fuentes candidatas ni datasets privados';
 end
