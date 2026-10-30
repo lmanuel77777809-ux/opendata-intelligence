@@ -5,8 +5,8 @@ ejecutó desde GitHub Actions con la configuración por token (`scripts/supabase
 
 **Resultado:** la base está desplegada en Supabase, cargada con los 163.525 datos reales del
 Banco Mundial y verificada contra la API del proveedor. La API pública responde con la clave
-publicable. Excel lee los datos desde Supabase. **Falta** el modelo completo en Excel/Power BI y comprobar
-la primera ejecución programada.
+publicable. El modelo completo de Excel lee los datos desde Supabase con las cifras exactas. **Falta**
+probar Power BI y comprobar la primera ejecución programada.
 
 ## Ejecuciones
 
@@ -17,7 +17,7 @@ la primera ejecución programada.
 | S3-6 Verificación de datos | Conteo por indicador: 12 de 12 iguales a la API; muestra al azar: 20 de 20 iguales | [41091004238](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091004238) |
 | S3-7 Segunda carga | `wdi-economy`: 0 nuevas, 0 modificadas, 76.994 iguales; `wdi-demography`: 0 nuevas, 0 modificadas, 86.531 iguales | [41091123125](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091123125) · [41091140937](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091140937) |
 | S3-8 Contrato REST en Supabase | 8 superadas, 0 fallidas, 2 omitidas por diseño (una solo para datos sintéticos; otra solo para PostgREST local) | [41091004238](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41091004238) |
-| S3-9 Excel / Power BI | Excel (Microsoft 365, Windows), consulta `PruebaRapida.pq` contra Supabase con la clave publicable y acceso anónimo: 250 filas, 6 columnas (PIB y población de ARG, COL, ESP, MEX y USA, 2000–2024), cargadas en hoja; **Actualizar todo** funciona. Pendientes: el modelo completo y Power BI | Captura del usuario, 2026-10-30 |
+| S3-9 Excel / Power BI | Excel (Microsoft 365, Windows) contra Supabase con la clave publicable y acceso anónimo. `PruebaRapida`: 250 filas; **Actualizar todo** funciona. Modelo completo (9 consultas de `integrations/powerquery`): `Observaciones` 27.944, `Geografias` 296, `Indicadores` 12, `Fuentes` 1, `Datasets` 2; parámetros y función, solo conexión. Las 6 cifras coinciden exactamente con el total que da la API (`Prefer: count=exact`), así que la paginación de 1000 en 1000 (28 páginas) no pierde ni repite filas. Pendiente: Power BI | Capturas del usuario, 2026-10-30 · [41099486456](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/41099486456) |
 | S3-10 Ejecución programada | **Pendiente**: primera a las 05:17 UTC del 2026-10-31 | — |
 
 ## Rendimiento en Supabase
