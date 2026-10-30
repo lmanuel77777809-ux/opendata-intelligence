@@ -1,65 +1,119 @@
 # Sprint 1 — Evidencia
 
-Fecha: 2026-10-30. Entorno: contenedor Ubuntu 24.04, Node 22.22.0, pnpm 10.28.0, PostgreSQL 16.15.
+Fecha: 2026-10-30. Pruebas reales ejecutadas en GitHub Actions (`ubuntu-24.04`, PostgreSQL 16),
+porque la red del contenedor de desarrollo bloquea las API de los proveedores.
 
-**Resumen:** la base de datos, el SDK de conectores, el conector del Banco Mundial y el worker están
-implementados y probados contra PostgreSQL. La parte que necesita la API real sigue **bloqueada**:
-la red del entorno corta todas las conexiones a los proveedores. Ningún dato real se ha cargado
-todavía y ninguna fuente está aprobada.
+**Resultado:** el flujo API real → extracción → PostgreSQL → consulta funciona con el Banco
+Mundial. Se cargaron **163.525 observaciones reales** de 12 indicadores; los conteos coinciden con
+la API en 12 de 12 indicadores, 20 de 20 valores al azar coinciden exactamente y la segunda carga
+no añade ni modifica nada. Los datos se cargaron en una base efímera de CI: aún no hay Supabase
+(Sprint 2) y ninguna fuente está aprobada en producción.
 
-## Pruebas ejecutadas
+Ejecuciones de referencia:
+[CI](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/40989439555) ·
+[Validación con API reales](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/40989439467) ·
+[primera validación, con el fallo pasajero](https://github.com/lmanuel77777809-ux/opendata-intelligence/actions/runs/40988633615)
 
-| Suite | Comando | Resultado |
-| --- | --- | --- |
-| Tipos | `pnpm typecheck` | Sin errores |
-| Unitarias | `pnpm test:unit` | 29 de 29 superadas (SDK 21, Banco Mundial 8) |
-| SQL | `pnpm db:test` | 35 de 35 aserciones superadas |
-| Integración worker + PostgreSQL | `WITH_INTEGRATION=1 pnpm db:test` | 8 de 8 superadas |
-| Control del runner | Aserción falsa deliberada | El runner falla con código 1, como debe |
+## Criterios de aceptación
 
-### Qué demuestran
-
-- **Esquema:** RLS activa en todas las tablas de `meta`, `ref`, `core` y `ops`; ninguna función
-  ejecutable por `PUBLIC`; todas las funciones fijan `search_path`.
-- **Lista blanca:** endpoints y pruebas de admisión con hosts no registrados se rechazan en la base;
-  el cliente HTTP no envía la petición y no sigue redirecciones hacia otros hosts.
-- **Admisión obligatoria:** sin una prueba anónima superada en 7 días no se abre ejecución; un 403
-  se registra como `fail_auth_required` y no se abre ejecución.
-- **Idempotencia:** repetir la misma carga da 0 nuevas, 0 modificadas y 0 revisiones.
-- **Revisiones:** un valor cambiado genera 1 fila de historial con valor anterior, nuevo y ejecución.
-- **Datos retirados:** se marcan con `withdrawn_at`, se conservan, desaparecen de la API pública y
-  quedan en el historial; si vuelven, se restauran con su revisión.
-- **Cuadre de métricas:** recibidas = nuevas + modificadas + iguales + rechazadas + sin valor.
-- **Respuestas incompletas:** si el total declarado no cuadra con las filas recibidas, el indicador
-  falla sin tocar sus datos y la ejecución queda `partial` con el error registrado.
-- **Permisos:** `anon` no ve fuentes candidatas ni datasets privados, no escribe, no ejecuta la
-  fusión ni ve errores, staging o equivalencias internas. `ingest_writer` no puede escribir
-  observaciones directamente ni aprobar fuentes, y el worker opera realmente con ese rol.
-- **Consulta:** `api.get_series` filtra por indicador, geografías y años, ordena y devuelve la
-  licencia en cada fila.
-
-### Datos de prueba
-
-Las pruebas usan **datos sintéticos** (códigos `ZZA`, `ZZB`, `ZZZ` y valores inventados) dentro de
-bases de prueba que se recrean en cada ejecución. La API del Banco Mundial se **simula** siguiendo su
-documentación; su forma real queda pendiente de contrastar.
-
-## Pruebas bloqueadas
-
-| Prueba | Motivo |
+| Criterio | Resultado |
 | --- | --- |
-| Admisión real de las 17 fuentes | `pnpm admission`: 35 de 35 peticiones con HTTP 000, `CONNECT tunnel failed, response 403` del proxy del entorno |
-| Formato real de la API del Banco Mundial | Sin red; los esquemas Zod pueden necesitar ajustes |
-| Carga real de los 12 indicadores | Sin red |
-| 20 observaciones contrastadas con el proveedor | Sin red |
-| Rendimiento de `get_series` con volumen real | Sin datos reales |
-| Ejecución en GitHub Actions | La sesión no tiene permiso de escritura en el repositorio |
+| Filas cargadas = valores no nulos que publica la API, por indicador | Cumplido: 12 de 12 |
+| Segunda ejecución: 0 nuevas, 0 modificadas, 0 duplicados | Cumplido: 163.525 iguales |
+| 20 de 20 muestras coinciden con el proveedor | Cumplido: 20 de 20, igualdad exacta |
+| Pruebas unitarias, SQL e integración en verde, también en CI | Cumplido: 29 + 35 + 9 |
+| `get_series` devuelve series ordenadas con fuente, unidad, licencia y fecha | Cumplido (pruebas SQL e integración; 75 filas reales en la medición) |
+| Cada ejecución registra recibidos, nuevos, modificados, rechazados, duración y errores | Cumplido (tabla siguiente) |
 
-## Pendiente (Sprint 2)
+## Ejecuciones reales
 
-- Proyecto Supabase dedicado, exposición del esquema `api` y despliegue de migraciones.
-- Flujo programado de ingesta en GitHub Actions con secretos.
-- Consulta Power Query paginada contra la API propia.
+| Ejecución | Dataset | Estado | Recibidas | Nuevas | Modificadas | Iguales | Rechazadas | Sin valor | Peticiones | Duración |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1ª | `worldbank:wdi-economy` | success | 122.892 | 76.994 | 0 | 0 | 0 | 45.898 | 142 | 41,6 s |
+| 1ª | `worldbank:wdi-demography` | success | 87.780 | 86.531 | 0 | 0 | 0 | 1.249 | 102 | 34,6 s |
+| 2ª | `worldbank:wdi-economy` | success | 122.892 | 0 | 0 | 76.994 | 0 | 45.898 | 142 | 37,3 s |
+| 2ª | `worldbank:wdi-demography` | success | 87.780 | 0 | 0 | 86.531 | 0 | 1.249 | 102 | 27,7 s |
+
+Cuadre en todas: recibidas = nuevas + modificadas + iguales + rechazadas + sin valor.
+
+## Conteo por indicador frente a la API
+
+Verificación con una descarga independiente del conector. La API devuelve 17.556 filas por
+indicador (266 economías y agregados × 66 años, 1960–2025), incluidas las vacías.
+
+| Indicador | Observaciones en base | Valores no nulos en la API |
+| --- | --- | --- |
+| `FP.CPI.TOTL.ZG` | 11.547 | 11.547 |
+| `GC.DOD.TOTL.GD.ZS` | 1.799 | 1.799 |
+| `NE.EXP.GNFS.ZS` | 11.427 | 11.427 |
+| `NY.GDP.MKTP.CD` | 14.811 | 14.811 |
+| `NY.GDP.MKTP.KD.ZG` | 14.388 | 14.388 |
+| `NY.GDP.PCAP.CD` | 14.811 | 14.811 |
+| `SL.UEM.TOTL.ZS` | 8.211 | 8.211 |
+| `SP.DYN.CBRT.IN` | 17.195 | 17.195 |
+| `SP.DYN.CDRT.IN` | 17.195 | 17.195 |
+| `SP.DYN.LE00.IN` | 17.191 | 17.191 |
+| `SP.POP.TOTL` | 17.460 | 17.460 |
+| `SP.URB.TOTL.IN.ZS` | 17.490 | 17.490 |
+
+## Incidencia corregida
+
+En la primera validación, el Banco Mundial devolvió un **HTTP 400 puntual** en la página 18 de
+`SP.DYN.LE00.IN`; esa ejecución quedó `partial` sin escribir nada de ese indicador, y en la
+repetición la misma página respondió bien. Desde el commit `d872cec` la descarga completa de un
+indicador se repite una vez tras 30 s ante fallos pasajeros, y el intento fallido queda registrado.
+En la validación siguiente no hubo errores.
+
+## Rendimiento
+
+`api.get_series('worldbank:NY.GDP.MKTP.CD', ESP/FRA/DEU, 2000–2024)` como `anon`: 75 filas,
+mediana **101 ms** en 5 ejecuciones, con 163.525 observaciones en base. Cumple el objetivo inicial
+(200 ms), pero el tiempo crece con el volumen porque la RLS se evalúa fila a fila. Queda
+como tarea del Sprint 2 antes de exponer la API.
+
+## Admisión real de las 17 fuentes
+
+GET anónimo desde GitHub Actions, sin cabeceras de autenticación ni correo en el User-Agent.
+
+| Fuente | Endpoints | HTTP | Lectura |
+| --- | --- | --- | --- |
+| Banco Mundial | 5 | 200 JSON | Acceso anónimo confirmado |
+| Our World in Data | CSV + metadatos | 200 | Acceso anónimo confirmado |
+| GLEIF | 2 | 200 JSON:API | Acceso anónimo confirmado |
+| Wikidata | SPARQL, Action API, REST | 200 | Confirmado; SPARQL tardó 6,9 s |
+| Jolpica F1 | 2 | 200 | Confirmado; licencia no comercial |
+| FMI | DataMapper ×2, SDMX `api.imf.org` | 200 | Confirmado, también el SDMX nuevo |
+| OCDE | estructura y datos | 200 | Confirmado; cuota baja documentada |
+| BCE | 1 | 200 | Confirmado |
+| Eurostat | 1 | 200 | Confirmado |
+| DBpedia | 1 | 200 | Confirmado |
+| WorldPop | catálogo ×2 / `stats` | 200 / 200 HTML | `stats` no devolvió JSON: no admitida |
+| ONU Data Portal | indicadores / datos | 200 / **401** | Los datos exigen token: **rechazada** |
+| SEC EDGAR | 2 | **403** | Esperado sin correo en el User-Agent; repetir con contacto |
+| OpenLigaDB | 2 | 200 | Confirmado; licencia sin verificar |
+| MusicBrainz | 2 | 200 | Confirmado |
+| OMS GHO | 1 | **500** | Error del servidor; retirada anunciada |
+| ONU SDG API | 1 | 200 | Confirmado; servicio declarado de prueba |
+
+## Pruebas locales y de CI
+
+| Suite | Resultado |
+| --- | --- |
+| Tipos (`pnpm typecheck`) | Sin errores |
+| Unitarias (`pnpm test:unit`) | 29 de 29 |
+| SQL (`pnpm db:test`) | 35 de 35 aserciones |
+| Integración worker + PostgreSQL (`WITH_INTEGRATION=1 pnpm db:test`) | 9 de 9 |
+
+Las pruebas unitarias y de integración usan datos **sintéticos** y una API del Banco Mundial
+simulada; las cifras reales de este documento salen solo de la validación con API reales.
+
+## Pendiente
+
+- Sprint 2: proyecto Supabase, exposición del esquema `api`, optimización de la consulta pública,
+  ingesta programada y consulta de Power Query.
+- SEC: repetir la admisión con un correo de contacto en el User-Agent (decisión pendiente).
+- El contenedor de desarrollo sigue sin red hacia los proveedores; no bloquea porque las pruebas
+  reales corren en GitHub Actions.
 
 ## Cómo reproducir
 
@@ -67,5 +121,6 @@ documentación; su forma real queda pendiente de contrastar.
 pnpm install
 pnpm typecheck && pnpm test:unit
 WITH_INTEGRATION=1 pnpm db:test
-pnpm admission            # requiere red hacia los proveedores
 ```
+
+Validación con API reales: workflow **Validación con API reales** (`workflow_dispatch`).
