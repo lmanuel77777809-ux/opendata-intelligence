@@ -7,6 +7,8 @@
  *   API_FIXTURE      'synthetic' (por defecto) si la base tiene db/test/api-fixture.sql; 'real' para datos reales
  *   PAGING_INDICATOR indicador para la prueba de paginación (por defecto test_source:TEST.IND)
  *   PAGE_SIZE        tamaño de página de esa prueba (por defecto 7; Supabase sirve como máximo 1000 filas)
+ *   API_OPENAPI      'public' (por defecto, PostgREST local) o 'restricted' (Supabase: desde 2026 la
+ *                    descripción OpenAPI solo se sirve con claves secretas, no con la publicable)
  *
  * Son las mismas peticiones que hacen las consultas de Power Query (integrations/powerquery).
  */
@@ -17,6 +19,7 @@ const API_KEY = process.env.API_KEY;
 const SYNTHETIC = (process.env.API_FIXTURE ?? 'synthetic') === 'synthetic';
 const PAGING_INDICATOR = process.env.PAGING_INDICATOR ?? 'test_source:TEST.IND';
 const PAGE_SIZE = Number(process.env.PAGE_SIZE ?? 7);
+const OPENAPI_RESTRICTED = process.env.API_OPENAPI === 'restricted';
 
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return {
@@ -40,7 +43,12 @@ async function get(path: string, extra: Record<string, string> = {}) {
 }
 
 describe.skipIf(!API_URL)('API REST (PostgREST, esquema api)', () => {
-  it('publica la descripción OpenAPI con las vistas de api', async () => {
+  it.runIf(OPENAPI_RESTRICTED)('la clave publicable no puede leer la descripción OpenAPI del esquema', async () => {
+    const { res, body } = await get('/', { Accept: 'application/openapi+json' });
+    expect(res.status, JSON.stringify(body).slice(0, 300)).toBe(401);
+  });
+
+  it.skipIf(OPENAPI_RESTRICTED)('publica la descripción OpenAPI con las vistas de api', async () => {
     const { res, body } = await get('/', { Accept: 'application/openapi+json' });
     expect(res.status).toBe(200);
     const paths = Object.keys((body as { paths: Record<string, unknown> }).paths);

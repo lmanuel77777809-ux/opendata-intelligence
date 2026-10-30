@@ -60,7 +60,7 @@ jobs:
             exit 1
           fi
           set +e
-          API_URL="$SUPABASE_URL/rest/v1" API_KEY="$SUPABASE_PUBLISHABLE_KEY" API_FIXTURE=real \
+          API_URL="$SUPABASE_URL/rest/v1" API_KEY="$SUPABASE_PUBLISHABLE_KEY" API_FIXTURE=real API_OPENAPI=restricted \
             PAGING_INDICATOR=worldbank:NY.GDP.MKTP.CD PAGING_GEO=ESP PAGE_SIZE=1000 \
             pnpm test:api --reporter=default --reporter=github-actions --reporter=json --outputFile=out/api-tests.json
           code=$?

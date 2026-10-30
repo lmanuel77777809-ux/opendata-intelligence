@@ -12,7 +12,7 @@ Supabase) desde el esquema `api`. No hace falta conectarse a ningún proveedor.
 | Cabecera `Accept-Profile` | `api` |
 | Formato | JSON (por defecto) o CSV con `Accept: text/csv` |
 | Máximo de filas por petición | 1000; para más, paginar |
-| Descripción OpenAPI | `GET /` con `Accept: application/openapi+json` |
+| Descripción OpenAPI | `GET /` con `Accept: application/openapi+json`. En Supabase no está disponible con la clave publicable (restricción de la plataforma desde 2026); sí en PostgREST local |
 
 Solo se publican datos de fuentes **aprobadas** y datasets **públicos**. Cada fila de
 observaciones lleva su licencia (`license_code`).
