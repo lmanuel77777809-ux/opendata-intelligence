@@ -1,0 +1,112 @@
+name: Validación con API reales
+
+# Pruebas contra las API reales de los proveedores (requieren internet):
+#  - admission: petición anónima a las 17 fuentes candidatas (35 endpoints).
+#  - worldbank: carga real de los 12 indicadores en un PostgreSQL efímero, repetición para
+#    comprobar idempotencia y verificación independiente contra la API.
+# No escribe en Supabase ni en ningún servicio externo. Resultados: anotaciones y artefactos.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/real-api.yml
+      - connectors/worldbank/**
+      - apps/worker/src/**
+      - scripts/admission-probe.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-api
+  cancel-in-progress: false
+
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prueba de admisión
+        run: bash scripts/admission-probe.sh admission-results
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "id  HTTP  tipo  segundos"
+            awk -F'\t' '{printf "%s  %s  %s  %s\n", $1, $2, $3, $4}' admission-results/summary.tsv
+          } > admission.txt
+          msg=$(sed -e 's/%/%25/g' admission.txt | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::notice title=Admisión de API (HTTP anónimo)::$msg"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: admission-results
+          path: |
+            admission-results/summary.tsv
+            admission-results/*.hdr
+            admission-results/*.err
+          retention-days: 30
+
+  worldbank:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_ADMIN: postgres://postgres:postgres@localhost:5432/postgres
+      DB_URL: postgres://postgres:postgres@localhost:5432/odi_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Base de pruebas (migraciones + aserciones SQL)
+        run: pnpm db:test
+      - name: Ingesta real (1ª ejecución)
+        env:
+          DATABASE_URL: ${{ env.DB_URL }}
+          DB_ROLE: ingest_writer
+        run: |
+          mkdir -p out
+          for d in worldbank:wdi-economy worldbank:wdi-demography; do
+            pnpm --silent ingest run "$d" > "out/run1-${d#worldbank:}.json" 2> "out/run1-${d#worldbank:}.log" || echo "::warning title=Ingesta $d::código $?"
+          done
+      - name: Ingesta real (repetición)
+        env:
+          DATABASE_URL: ${{ env.DB_URL }}
+          DB_ROLE: ingest_writer
+        run: |
+          for d in worldbank:wdi-economy worldbank:wdi-demography; do
+            pnpm --silent ingest run "$d" > "out/run2-${d#worldbank:}.json" 2> "out/run2-${d#worldbank:}.log" || echo "::warning title=Ingesta $d (repetición)::código $?"
+          done
+      - name: Errores registrados
+        if: always()
+        run: |
+          errs=$(psql "$DB_URL" -At -c "select run_id || ' ' || phase || ' ' || error_code || ': ' || left(message, 300) from ops.ingestion_error order by id limit 20" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          [ -n "$errs" ] && echo "::warning title=Errores de ingesta::$errs" || echo "::notice title=Errores de ingesta::ninguno"
+      - name: Verificación independiente contra la API
+        env:
+          DATABASE_URL: ${{ env.DB_URL }}
+        run: pnpm --silent exec tsx apps/worker/src/verify-worldbank.ts > out/verify.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worldbank-results
+          path: out/
+          retention-days: 30
