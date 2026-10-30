@@ -1,0 +1,11 @@
+{
+  "name": "@odi/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@odi/connector-sdk": "workspace:*",
+    "@odi/connector-worldbank": "workspace:*",
+    "pg": "8.23.1"
+  }
+}
