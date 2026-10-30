@@ -4,8 +4,10 @@ Plataforma que centraliza datos históricos y actualizados procedentes **exclusi
 públicas, gratuitas y sin autenticación**, los guarda en PostgreSQL (Supabase) con historial de
 revisiones y los sirve a una aplicación web, Excel y Power BI a través de una API propia.
 
-Estado: **Sprint 1 completado** (datos reales del Banco Mundial cargados y verificados en CI). Ver [evidencia del Sprint 1](docs/sprint-1-evidencia.md) y
-[ADR-001](docs/adr/ADR-001-stack.md).
+Estado: **Sprint 2 en curso** (API pública, Excel/Power BI y despliegue en Supabase). Documentación:
+[API](docs/api.md) · [Excel y Power BI](docs/excel-powerbi.md) · [Supabase](docs/supabase-setup.md) ·
+[evidencia Sprint 1](docs/sprint-1-evidencia.md) · [evidencia Sprint 2](docs/sprint-2-evidencia.md) ·
+[ADR-001](docs/adr/ADR-001-stack.md) · [ADR-002](docs/adr/ADR-002-modelo-de-lectura.md)
 
 ## Regla fundamental
 
@@ -23,7 +25,10 @@ licencia.
 | `packages/connector-sdk/` | Cliente HTTP (lista blanca, timeouts, reintentos, límites), contrato de conector, períodos |
 | `connectors/worldbank/` | Conector del Banco Mundial (Indicators API v2) |
 | `apps/worker/` | Worker de ingesta y CLI `ingest` |
-| `scripts/` | Pruebas de BD y prueba de admisión de las API |
+| `integrations/powerquery/` | Consultas Power Query (M) para Excel y Power BI |
+| `tests/api/` | Contrato HTTP de la API REST (PostgREST) |
+| `scripts/` | Migraciones, pruebas de BD, PostgREST de pruebas y prueba de admisión de las API |
+| `.github/workflows/` | CI, validación con API reales, despliegue en Supabase e ingesta programada |
 
 ## Requisitos
 
@@ -38,6 +43,8 @@ pnpm test:unit                         # pruebas unitarias
 pnpm db:test                           # base nueva + migraciones + aserciones SQL
 WITH_INTEGRATION=1 pnpm db:test        # además, worker completo contra PostgreSQL (API simulada)
 pnpm admission                         # prueba HTTP anónima real de las 17 fuentes candidatas
+bash scripts/migrate.sh <url>          # aplica migraciones pendientes (registro compatible con Supabase)
+API_URL=http://localhost:3000 pnpm test:api   # contrato REST contra un PostgREST
 ```
 
 `pnpm db:test` levanta un clúster temporal en `.tmp/pg` (puerto 54329) si encuentra los binarios de
@@ -63,7 +70,8 @@ User-Agent (Wikidata, SEC y MusicBrainz lo exigen).
 
 ## Seguridad
 
-- PostgREST debe exponer **solo** el esquema `api` (vistas `security_invoker` + RLS).
+- PostgREST debe exponer **solo** el esquema `api`. Sus vistas pertenecen a `api_reader` (solo
+  lectura) y aplican la regla de visibilidad; el público no puede leer ninguna tabla (ADR-002).
 - El worker usa el rol `ingest_writer`: escribe en staging y llama a funciones de fusión; no puede
   insertar, modificar ni borrar observaciones directamente. Su contraseña se fija fuera de las
   migraciones: `alter role ingest_writer login password '...'`.

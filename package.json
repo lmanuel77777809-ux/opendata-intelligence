@@ -2,7 +2,7 @@
   "name": "opendata-intelligence",
   "private": true,
   "version": "0.1.0",
-  "description": "Plataforma de inteligencia de datos con API p\u00fablicas, gratuitas y sin autenticaci\u00f3n",
+  "description": "Plataforma de inteligencia de datos con API públicas, gratuitas y sin autenticación",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "engines": {
@@ -19,6 +19,7 @@
     "test:api": "vitest run --project api"
   },
   "devDependencies": {
+    "@microsoft/powerquery-parser": "2.0.0",
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "tsx": "4.23.15",

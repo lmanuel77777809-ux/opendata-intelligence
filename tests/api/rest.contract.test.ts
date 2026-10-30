@@ -92,6 +92,24 @@ describe.skipIf(!API_URL)('API REST (PostgREST, esquema api)', () => {
     expect(seen.size).toBe(total);
   });
 
+  it('acepta exactamente la consulta que construye Power Query (fnOdiGet + Observaciones.pq)', async () => {
+    // Mismos parámetros y codificación que Web.Contents con Query = [...].
+    const params = new URLSearchParams({
+      select: 'indicator_key,geo_kind,geo_code,geo_name,frequency,period_label,period_start,year,value,obs_status,license_code,updated_at',
+      order: 'indicator_key.asc,geo_kind.asc,geo_code.asc,frequency.asc,period_start.asc',
+      indicator_key: `in.(${PAGING_INDICATOR})`,
+      and: '(year.gte.2000,year.lte.2004)',
+      limit: '1000',
+      offset: '0',
+    });
+    const { res, body } = await get(`/v_observation?${params.toString()}`, { Prefer: 'count=exact' });
+    expect(res.status).toBeLessThan(300);
+    const rows = body as Array<{ indicator_key: string; year: number; value: number; license_code: string }>;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.indicator_key === PAGING_INDICATOR && r.year >= 2000 && r.year <= 2004 && r.license_code)).toBe(true);
+    expect(Number(res.headers.get('content-range')!.split('/')[1])).toBe(rows.length);
+  });
+
   it('get_series por RPC (GET y POST) devuelve la serie ordenada', async () => {
     const indicator = SYNTHETIC ? 'test_source:TEST.IND' : PAGING_INDICATOR;
     const geo = SYNTHETIC ? 'ZZB' : (process.env.PAGING_GEO ?? 'ESP');

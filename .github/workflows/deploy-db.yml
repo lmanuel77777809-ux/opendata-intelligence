@@ -1,0 +1,82 @@
+name: Desplegar base de datos (Supabase)
+
+# Aplica las migraciones pendientes en el proyecto Supabase y comprueba la API publicada.
+# Secretos (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL          cadena de conexión del pooler (modo sesión, puerto 5432), usuario postgres
+#   INGEST_WRITER_PASSWORD   opcional: contraseña del rol ingest_writer
+# Variables (pestaña Variables):
+#   SUPABASE_URL             https://<ref>.supabase.co
+#   SUPABASE_PUBLISHABLE_KEY clave publicable (no es secreta: es la que usan Excel y la web)
+# Sin SUPABASE_DB_URL el workflow termina sin hacer nada.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - supabase/migrations/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-db
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - name: ¿Hay proyecto configurado?
+        id: cfg
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::notice title=Despliegue omitido::Falta el secreto SUPABASE_DB_URL"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip == 'false'
+      - name: Migraciones pendientes
+        if: steps.cfg.outputs.skip == 'false'
+        run: |
+          out=$(bash scripts/migrate.sh "$SUPABASE_DB_URL")
+          echo "$out"
+          echo "::notice title=Migraciones::$(echo "$out" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')"
+      - name: Contraseña del rol de ingesta
+        if: steps.cfg.outputs.skip == 'false' && env.INGEST_WRITER_PASSWORD != ''
+        run: |
+          printf "alter role ingest_writer login password :'pw';\n" \
+            | psql -X -q -v ON_ERROR_STOP=1 -v pw="$INGEST_WRITER_PASSWORD" "$SUPABASE_DB_URL"
+          echo "::notice title=ingest_writer::Rol de ingesta habilitado para iniciar sesión"
+      - name: Comprobación en la base
+        if: steps.cfg.outputs.skip == 'false'
+        run: |
+          psql -X -At -v ON_ERROR_STOP=1 "$SUPABASE_DB_URL" <<'SQL' | tee check.txt
+          select 'migraciones registradas: ' || count(*) from supabase_migrations.schema_migrations;
+          select 'fuentes: ' || string_agg(code || '=' || status, ', ' order by code) from meta.source;
+          select 'datasets públicos: ' || count(*) filter (where is_public) || ' de ' || count(*) from meta.dataset;
+          select 'observaciones: ' || count(*) from core.observation;
+          SQL
+          echo "::notice title=Estado de la base::$(sed -e 's/%/%25/g' check.txt | awk 'BEGIN{ORS="%0A"} {print}')"
+      - name: Comprobación de la API publicada
+        if: steps.cfg.outputs.skip == 'false' && env.SUPABASE_URL != '' && env.SUPABASE_PUBLISHABLE_KEY != ''
+        run: |
+          code=$(curl -s -o body.json -w '%{http_code}' "$SUPABASE_URL/rest/v1/v_source?select=source_code,status" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Accept-Profile: api")
+          if [ "$code" = "200" ]; then
+            echo "::notice title=API publicada::HTTP 200 en /rest/v1/v_source: $(head -c 300 body.json)"
+          elif [ "$code" = "406" ]; then
+            echo "::error title=API publicada::HTTP 406: el esquema api no está expuesto. Supabase > Project Settings > Data API > Exposed schemas: añadir api"
+            exit 1
+          else
+            echo "::error title=API publicada::HTTP $code: $(head -c 300 body.json)"
+            exit 1
+          fi

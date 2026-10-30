@@ -6,7 +6,12 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['packages/*/test/**/*.test.ts', 'connectors/*/test/**/*.test.ts', 'apps/*/test/**/*.unit.test.ts'],
+          include: [
+            'packages/*/test/**/*.test.ts',
+            'connectors/*/test/**/*.test.ts',
+            'apps/*/test/**/*.unit.test.ts',
+            'integrations/*/test/**/*.test.ts',
+          ],
         },
       },
       {

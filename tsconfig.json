@@ -26,6 +26,7 @@
     "apps/*/src",
     "apps/*/test",
     "vitest.config.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "integrations/*/test/**/*.ts"
   ]
 }

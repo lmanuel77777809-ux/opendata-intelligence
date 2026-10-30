@@ -1,0 +1,79 @@
+name: Ingesta programada
+
+# Cada día ejecuta los datasets vencidos según su propia frecuencia (ops.due_datasets).
+# Secreto: INGEST_DATABASE_URL (rol ingest_writer, por el pooler de Supabase en modo sesión).
+# Variable opcional: ODI_CONTACT (contacto para el User-Agent).
+# Sin el secreto, el workflow termina sin hacer nada.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 'Dataset concreto (vacío = todos los vencidos)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.INGEST_DATABASE_URL }}
+      ODI_CONTACT: ${{ vars.ODI_CONTACT }}
+      DATASET: ${{ inputs.dataset }}
+    steps:
+      - name: ¿Hay base configurada?
+        id: cfg
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice title=Ingesta omitida::Falta el secreto INGEST_DATABASE_URL"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip == 'false'
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.skip == 'false'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.skip == 'false'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.cfg.outputs.skip == 'false'
+      - name: Ingesta
+        if: steps.cfg.outputs.skip == 'false'
+        run: |
+          mkdir -p out
+          set +e
+          if [ -n "$DATASET" ]; then pnpm --silent ingest run "$DATASET" > out/result.json 2> out/log.jsonl
+          else pnpm --silent ingest due > out/result.json 2> out/log.jsonl; fi
+          code=$?
+          set -e
+          summary=$(node -e '
+            const text = require("fs").readFileSync("out/result.json", "utf8").trim();
+            if (!text) { console.log("ningún dataset vencido"); process.exit(0); }
+            const docs = text.split(/\n(?=\{)/).map((t) => JSON.parse(t));
+            for (const o of docs) {
+              const r = o.run ?? {};
+              console.log(`${o.datasetCode} ${o.status}: nuevas ${r.records_inserted ?? 0}, modificadas ${r.records_updated ?? 0}, iguales ${r.records_unchanged ?? 0}, rechazadas ${r.records_rejected ?? 0}${o.reason ? " — " + o.reason : ""}`);
+            }' | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          if [ "$code" = "0" ]; then echo "::notice title=Ingesta::$summary"
+          elif [ "$code" = "2" ]; then echo "::warning title=Ingesta parcial::$summary"
+          else echo "::error title=Ingesta fallida::$summary"; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.cfg.outputs.skip == 'false'
+        with:
+          name: ingest-${{ github.run_id }}
+          path: out/
+          retention-days: 30

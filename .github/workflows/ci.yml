@@ -78,7 +78,10 @@ jobs:
       - name: Contrato de la API REST
         env:
           API_URL: http://localhost:3000
-        run: pnpm test:api
+        run: |
+          pnpm test:api --reporter=default --reporter=json --outputFile=api-tests.json
+          jq -r '"\(.numPassedTests) superadas, \(.numFailedTests) fallidas, \(.numPendingTests) omitidas de \(.numTotalTests)"' api-tests.json \
+            | xargs -I{} echo "::notice title=Contrato API REST (datos sintéticos)::{}"
       - name: Registro de PostgREST
         if: failure()
         run: |

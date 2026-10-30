@@ -49,10 +49,10 @@ echo "== Emulación de roles de Supabase"
 "${PSQL[@]}" "$DATABASE_URL_TEST" -f "$ROOT/db/test/bootstrap.sql"
 
 echo "== Migraciones"
-for f in "$ROOT"/supabase/migrations/*.sql; do
-  echo "   $(basename "$f")"
-  "${PSQL[@]}" "$DATABASE_URL_TEST" -f "$f"
-done
+bash "$ROOT/scripts/migrate.sh" "$DATABASE_URL_TEST"
+# Repetir no debe aplicar nada: el registro de migraciones funciona.
+bash "$ROOT/scripts/migrate.sh" "$DATABASE_URL_TEST" | grep -q 'aplicadas: 0$' \
+  || { echo "FALLO: la segunda pasada de migraciones no fue vacía" >&2; exit 1; }
 
 echo "== Pruebas SQL"
 LOG="$TMP/db-test.log"
