@@ -100,6 +100,63 @@ end
 $$;
 reset role;
 
+-- 4b. El público solo lee el esquema api: ninguna tabla directamente.
+set role anon;
+do $$
+begin
+  perform count(*) from core.observation;
+  raise exception 'debía fallar';
+exception when insufficient_privilege then
+  raise notice 'PASS anon no lee core.observation directamente';
+end
+$$;
+do $$
+begin
+  perform count(*) from meta.source;
+  raise exception 'debía fallar';
+exception when insufficient_privilege then
+  raise notice 'PASS anon no lee meta.source directamente';
+end
+$$;
+reset role;
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from pg_class c join pg_namespace ns on ns.oid = c.relnamespace
+  where ns.nspname = 'api' and c.relkind = 'v'
+    and (pg_get_userbyid(c.relowner) <> 'api_reader'
+         or not coalesce(c.reloptions @> array['security_barrier=true'], false)
+         or not coalesce(c.reloptions @> array['security_invoker=false'], false));
+  assert n = 0, format('%s vistas de api sin propietario api_reader o sin security_barrier', n);
+  assert not has_table_privilege('api_reader', 'core.observation', 'INSERT')
+     and not has_table_privilege('api_reader', 'core.observation', 'UPDATE')
+     and not has_table_privilege('api_reader', 'meta.source', 'UPDATE'), 'api_reader no debe poder escribir';
+  assert not has_table_privilege('api_reader', 'ref.geo_code_map', 'SELECT')
+     and not has_table_privilege('api_reader', 'ops.ingestion_error', 'SELECT'), 'api_reader no debe leer datos internos';
+  raise notice 'PASS vistas de api: propietario api_reader de solo lectura, security_barrier activo';
+end
+$$;
+
+do $$
+begin
+  assert (select count(*) from core.series where geo_code is null) = 0, 'series sin geo_code';
+  assert (select geo_code from core.series s join ref.country c on c.id = s.country_id where c.iso3 = 'ZZB' limit 1) = 'ZZB';
+  assert (select indicator_key from core.indicator where external_code = 'TEST.IND') = 'test_source:TEST.IND';
+  begin
+    update ref.country set iso3 = 'ZZC' where iso3 = 'ZZA';
+    raise exception 'debía fallar';
+  exception when check_violation then null;
+  end;
+  begin
+    update meta.source set code = 'otro' where code = 'test_source';
+    raise exception 'debía fallar';
+  exception when check_violation then null;
+  end;
+  raise notice 'PASS claves de consulta rellenas y códigos de origen inmutables';
+end
+$$;
+
 -- 5. Un dato retirado desaparece de la API pública pero su historial sigue visible.
 do $$
 declare v_run bigint;

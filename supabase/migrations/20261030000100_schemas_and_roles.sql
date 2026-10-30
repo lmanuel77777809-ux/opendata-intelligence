@@ -19,8 +19,9 @@ comment on schema api is 'Vistas y funciones de solo lectura publicadas por Post
 -- Nadie fuera del propietario usa estos esquemas salvo que se conceda explícitamente.
 revoke all on schema meta, ref, ops, core, staging, api from public;
 
--- Las funciones nacen ejecutables por PUBLIC; se revoca por defecto en nuestros esquemas.
-alter default privileges in schema meta, ref, ops, core, staging, api revoke execute on functions from public;
+-- Las funciones nacen ejecutables por PUBLIC. Un ALTER DEFAULT PRIVILEGES por esquema no puede
+-- quitar ese permiso global, así que cada migración que crea funciones lo revoca explícitamente
+-- (y db/test/01_schema.test.sql comprueba que ninguna queda ejecutable por PUBLIC).
 
 -- Rol de escritura del worker. Nace sin LOGIN: la contraseña se fija fuera de las
 -- migraciones (secreto) con: alter role ingest_writer login password '...';

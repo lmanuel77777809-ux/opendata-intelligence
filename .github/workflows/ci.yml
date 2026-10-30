@@ -41,3 +41,46 @@ jobs:
           DATABASE_URL_ADMIN: postgres://postgres:postgres@localhost:5432/postgres
           WITH_INTEGRATION: '1'
         run: pnpm db:test
+
+  api-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_ADMIN: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Base de pruebas con datos sintéticos publicados
+        run: |
+          pnpm db:test
+          psql -X -q -v ON_ERROR_STOP=1 postgres://postgres:postgres@localhost:5432/odi_test -f db/test/api-fixture.sql
+      - name: PostgREST
+        env:
+          DB_URI: postgres://authenticator:authenticator_test@localhost:5432/odi_test
+        run: bash scripts/start-postgrest.sh
+      - name: Contrato de la API REST
+        env:
+          API_URL: http://localhost:3000
+        run: pnpm test:api
+      - name: Registro de PostgREST
+        if: failure()
+        run: |
+          msg=$(docker logs odi-postgrest 2>&1 | tail -40 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+          echo "::error title=PostgREST::$msg"

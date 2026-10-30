@@ -101,27 +101,37 @@ async function main() {
   await q(`update meta.source set status = 'approved' where code = 'worldbank'`);
   await q(`update meta.dataset set is_public = true where code like 'worldbank:%'`);
   const client = await db.connect();
-  const times: number[] = [];
-  let rowsReturned = 0;
-  try {
-    await client.query('set role anon');
+  const measure = async (sql: string) => {
+    const times: number[] = [];
+    let rows = 0;
     for (let i = 0; i < 5; i++) {
-      const plan = await client.query(
-        `explain (analyze, format json) select * from api.get_series('worldbank:NY.GDP.MKTP.CD', array['ESP','FRA','DEU'], 2000, 2024)`,
-      );
+      const plan = await client.query(`explain (analyze, format json) ${sql}`);
       const root = plan.rows[0]['QUERY PLAN'][0];
       times.push(root['Execution Time']);
-      rowsReturned = root.Plan['Actual Rows'];
+      rows = root.Plan['Actual Rows'];
     }
+    times.sort((a, b) => a - b);
+    return { rows, median_ms: times[2]!, runs_ms: times };
+  };
+  let rpc: Awaited<ReturnType<typeof measure>>;
+  let view: Awaited<ReturnType<typeof measure>>;
+  try {
+    await client.query('set role anon');
+    rpc = await measure(`select * from api.get_series('worldbank:NY.GDP.MKTP.CD', array['ESP','FRA','DEU'], 2000, 2024)`);
+    // Lo que genera PostgREST para ?indicator_key=eq...&geo_code=in.(...)&year=gte.2000&year=lte.2024
+    view = await measure(
+      `select * from api.v_observation where indicator_key = 'worldbank:NY.GDP.MKTP.CD' and geo_code = any (array['ESP','FRA','DEU']) and year >= 2000 and year <= 2024`,
+    );
   } finally {
     await client.query('reset role');
     client.release();
   }
-  times.sort((a, b) => a - b);
   const total = await q<{ n: string }>(`select count(*) as n from core.observation`);
-  report.performance = { query: "get_series('worldbank:NY.GDP.MKTP.CD', ESP/FRA/DEU, 2000-2024)", rows: rowsReturned, median_ms: times[2], runs_ms: times, observations_in_db: Number(total[0]!.n) };
-  notice('Rendimiento get_series como anon', [
-    `Filas devueltas: ${rowsReturned}; mediana ${times[2]?.toFixed(2)} ms (5 ejecuciones: ${times.map((t) => t.toFixed(2)).join(', ')} ms)`,
+  report.performance = { rpc_get_series: rpc, view_filtered: view, observations_in_db: Number(total[0]!.n) };
+  const fmt = (m: typeof rpc) => `${m.rows} filas, mediana ${m.median_ms.toFixed(2)} ms (5 ejecuciones: ${m.runs_ms.map((t) => t.toFixed(2)).join(', ')} ms)`;
+  notice('Rendimiento de la API como anon', [
+    `get_series (RPC): ${fmt(rpc)}`,
+    `v_observation filtrada (patrón PostgREST/Power Query): ${fmt(view)}`,
     `Observaciones totales en base: ${total[0]!.n}`,
   ]);
 

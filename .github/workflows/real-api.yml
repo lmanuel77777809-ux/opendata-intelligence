@@ -104,6 +104,18 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DB_URL }}
         run: pnpm --silent exec tsx apps/worker/src/verify-worldbank.ts > out/verify.json
+      - name: PostgREST sobre los datos reales
+        env:
+          DB_URI: postgres://authenticator:authenticator_test@localhost:5432/odi_test
+        run: bash scripts/start-postgrest.sh
+      - name: API REST con datos reales (patrón de Power Query)
+        env:
+          API_URL: http://localhost:3000
+          API_FIXTURE: real
+          PAGING_INDICATOR: worldbank:NY.GDP.MKTP.CD
+          PAGING_GEO: ESP
+          PAGE_SIZE: '1000'
+        run: pnpm test:api
       - uses: actions/upload-artifact@v4
         if: always()
         with:

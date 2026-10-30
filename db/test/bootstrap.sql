@@ -13,3 +13,14 @@ begin
   end if;
 end
 $$;
+
+-- Rol con el que PostgREST se conecta y desde el que asume anon/authenticated (como en Supabase).
+-- La contraseña solo vale para la base de pruebas.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'authenticator') then
+    create role authenticator login noinherit password 'authenticator_test';
+  end if;
+end
+$$;
+grant anon, authenticated to authenticator;
