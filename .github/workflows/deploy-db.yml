@@ -25,14 +25,31 @@ jobs:
     steps:
       - name: ¿Hay proyecto configurado?
         id: cfg
+        # Solo se comprueba si existen (nunca se imprime un valor).
         env:
-          HAS_CFG: ${{ (secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_DB_PASSWORD != '') || secrets.SUPABASE_DB_URL != '' }}
+          S_SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          S_SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD != '' }}
+          S_INGEST_WRITER_PASSWORD: ${{ secrets.INGEST_WRITER_PASSWORD != '' }}
+          S_SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL != '' }}
+          V_SUPABASE_ACCESS_TOKEN: ${{ vars.SUPABASE_ACCESS_TOKEN != '' }}
+          V_SUPABASE_DB_PASSWORD: ${{ vars.SUPABASE_DB_PASSWORD != '' }}
+          V_INGEST_WRITER_PASSWORD: ${{ vars.INGEST_WRITER_PASSWORD != '' }}
+          V_SUPABASE_DB_URL: ${{ vars.SUPABASE_DB_URL != '' }}
         run: |
-          if [ "$HAS_CFG" != "true" ]; then
+          found=""
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD INGEST_WRITER_PASSWORD SUPABASE_DB_URL; do
+            s="S_$name"; v="V_$name"
+            if [ "${!s}" = "true" ]; then found="$found%0A  $name: guardado como secreto"; else found="$found%0A  $name: no hay secreto"; fi
+            if [ "${!v}" = "true" ]; then
+              echo "::warning title=Secreto en la pestaña equivocada::$name está en Variables; bórralo de ahí y créalo en la pestaña Secrets"
+            fi
+          done
+          echo "::notice title=Secretos de Supabase en este repositorio::$found"
+          if { [ "$S_SUPABASE_ACCESS_TOKEN" = "true" ] && [ "$S_SUPABASE_DB_PASSWORD" = "true" ]; } || [ "$S_SUPABASE_DB_URL" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
             echo "::notice title=Despliegue omitido::Faltan los secretos de Supabase (SUPABASE_ACCESS_TOKEN y SUPABASE_DB_PASSWORD, o SUPABASE_DB_URL)"
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
         if: steps.cfg.outputs.skip == 'false'
