@@ -1,6 +1,6 @@
 # Sprint 2 — Evidencia
 
-Fecha: 2026-10-31. Pruebas reales en GitHub Actions (`ubuntu-24.04`, PostgreSQL 16, PostgREST v12.2.3).
+Fecha: 2026-10-30. Pruebas reales en GitHub Actions (`ubuntu-24.04`, PostgreSQL 16, PostgREST v12.2.3).
 
 **Resultado:** la API pública está construida y probada por HTTP con el mismo software que usa
 Supabase (PostgREST), con datos sintéticos y con los 163.525 datos reales del Banco Mundial. La
@@ -76,10 +76,17 @@ un rol de solo lectura, `api_reader`, y aplican ellas la regla de visibilidad co
 
 ## Decisión registrada
 
-El 2026-10-31 el responsable del proyecto aprobó publicar el Banco Mundial. Queda en la migración
-`20261031000300_approve_worldbank.sql`, con la evidencia y la licencia (CC BY 4.0, atribución
+El 2026-10-30 el responsable del proyecto aprobó publicar el Banco Mundial. Queda en la migración
+`20261030004000_approve_worldbank.sql`, con la evidencia y la licencia (CC BY 4.0, atribución
 obligatoria), y en el nuevo registro `meta.catalog_change`, que guarda cada cambio de estado de
 una fuente o de publicación de un dataset con su motivo, fecha y autor, y no admite ediciones.
+
+## Corrección posterior (30-10-2026)
+
+La auditoría detectó que este documento, ADR-002, la aprobación del Banco Mundial y tres
+migraciones usaban la fecha 31-10-2026, posterior a la real. Se corrigió a 30-10-2026 y las
+migraciones pasaron de `20261031000100`–`000300` a `20261030002000`–`004000`, antes de aplicarse
+en ninguna base persistente. El despliegue en Supabase pasó a ser solo manual.
 
 ## Pendiente
 

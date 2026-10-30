@@ -1,6 +1,6 @@
 # ADR-002: Modelo de lectura de la API pública
 
-- Estado: aceptada (Sprint 2, 2026-10-31). Sustituye la parte de ADR-001 que exponía vistas
+- Estado: aceptada (Sprint 2, 2026-10-30). Sustituye la parte de ADR-001 que exponía vistas
   `security_invoker` con RLS para el público.
 
 ## Contexto

@@ -152,7 +152,7 @@ describe.skipIf(!DB_URL)('worker + PostgreSQL (API simulada)', () => {
     };
     const series = `select geo_code, period_label, value::float, license_code
                     from api.get_series('worldbank:SP.POP.TOTL', array['ESP'], 2020, 2024)`;
-    // Aprobado y publicado por la migración 20261031000300.
+    // Aprobado y publicado por la migración 20261030004000.
     expect(await asAnon(series)).toEqual([{ geo_code: 'ESP', period_label: '2023', value: 1010, license_code: 'CC-BY-4.0' }]);
 
     await admin.query(`update meta.dataset set is_public = false where code = $1`, [DATASET]);

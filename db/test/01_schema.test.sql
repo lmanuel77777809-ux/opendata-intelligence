@@ -31,7 +31,7 @@ do $$
 declare n integer;
 begin
   select count(*) into n from meta.source
-  where code = 'worldbank' and status = 'approved' and terms_reviewed_at = date '2026-10-31' and status_reason is not null;
+  where code = 'worldbank' and status = 'approved' and terms_reviewed_at = date '2026-10-30' and status_reason is not null;
   assert n = 1, 'el Banco Mundial debía estar aprobado, con fecha de revisión y motivo';
   select count(*) into n from meta.dataset where code like 'worldbank:%' and is_public;
   assert n = 2, 'se esperaban 2 datasets públicos del Banco Mundial';
@@ -40,7 +40,7 @@ begin
   raise notice 'PASS Banco Mundial aprobado y publicado: 2 datasets públicos, 12 indicadores';
 
   select count(*) into n from meta.catalog_change
-  where entity = 'source' and entity_code = 'worldbank' and old_value = 'candidate' and new_value = 'approved' and reason like 'Aprobada el 2026-10-31%';
+  where entity = 'source' and entity_code = 'worldbank' and old_value = 'candidate' and new_value = 'approved' and reason like 'Aprobada el 2026-10-30%';
   assert n = 1, 'falta el registro de la aprobación del Banco Mundial';
   select count(*) into n from meta.catalog_change
   where entity = 'dataset' and entity_code like 'worldbank:%' and old_value = 'false' and new_value = 'true' and reason like 'Publicación aprobada%';

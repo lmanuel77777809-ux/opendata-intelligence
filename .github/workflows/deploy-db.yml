@@ -9,12 +9,9 @@ name: Desplegar base de datos (Supabase)
 #   SUPABASE_PUBLISHABLE_KEY clave publicable (no es secreta: es la que usan Excel y la web)
 # Sin SUPABASE_DB_URL el workflow termina sin hacer nada.
 
+# Solo manual: ningún cambio de esquema llega a producción sin que alguien lo lance.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - supabase/migrations/**
 
 permissions:
   contents: read

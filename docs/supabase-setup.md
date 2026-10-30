@@ -30,8 +30,8 @@ En el repositorio: **Settings → Secrets and variables → Actions**.
 ## 4. Desplegar
 
 **Actions → Desplegar base de datos (Supabase) → Run workflow**. Aplica las migraciones
-pendientes, habilita `ingest_writer` y comprueba que la API responde. Las migraciones nuevas se
-despliegan solas al llegar a `main`.
+pendientes, habilita `ingest_writer` y comprueba que la API responde. El despliegue es siempre
+manual: una migración nueva en `main` no llega a Supabase hasta que alguien lanza este workflow.
 
 ## 5. Cargar datos
 
