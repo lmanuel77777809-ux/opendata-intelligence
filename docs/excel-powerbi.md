@@ -9,6 +9,13 @@ los proveedores), paginan solas y se pueden actualizar en el servicio de Power B
 - La **clave publicable** de Supabase (*Project Settings → API Keys*). Es de solo lectura y los
   permisos de la base protegen los datos. Nunca uses la clave `service_role` ni la secreta.
 
+## Prueba rápida (una sola consulta)
+
+Para comprobar la conexión antes de montar el modelo: **Datos → Obtener datos → Desde otras
+fuentes → Consulta en blanco → Editor avanzado**, pega `PruebaRapida.pq`, cambia la URL y la clave
+de las dos primeras líneas y pulsa **Listo**. Si pide acceso al contenido web: **Anónimo →
+Conectar**. Devuelve el PIB y la población de 5 países, 2000–2024 (250 filas).
+
 ## Power BI Desktop
 
 1. **Inicio → Transformar datos** para abrir el editor de Power Query.

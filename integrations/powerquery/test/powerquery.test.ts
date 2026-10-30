@@ -14,7 +14,7 @@ const files = readdirSync(dir).filter((f) => f.endsWith('.pq'));
 describe('consultas Power Query', () => {
   it('existen las consultas esperadas', () => {
     expect(files.sort()).toEqual(
-      ['Datasets.pq', 'Fuentes.pq', 'Geografias.pq', 'Indicadores.pq', 'Observaciones.pq', 'OdiApiKey.pq', 'OdiBaseUrl.pq', 'fnOdiGet.pq'].sort(),
+      ['Datasets.pq', 'Fuentes.pq', 'Geografias.pq', 'Indicadores.pq', 'Observaciones.pq', 'OdiApiKey.pq', 'OdiBaseUrl.pq', 'PruebaRapida.pq', 'fnOdiGet.pq'].sort(),
     );
   });
 
