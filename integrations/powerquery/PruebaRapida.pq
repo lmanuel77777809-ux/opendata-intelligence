@@ -1,5 +1,6 @@
 // PruebaRapida: una sola consulta para comprobar la conexión desde Excel o Power BI.
-// Cambia las dos primeras líneas por la URL del proyecto y la clave PUBLICABLE de Supabase.
+// Cambia las dos primeras líneas por la URL del proyecto (sin "/rest/v1" al final) y la clave
+// PUBLICABLE de Supabase.
 // Para el modelo completo (indicadores, geografías, fuentes) usa las demás consultas de esta carpeta.
 let
     Url = "https://TU-PROYECTO.supabase.co",

@@ -5,7 +5,8 @@ los proveedores), paginan solas y se pueden actualizar en el servicio de Power B
 
 ## Qué necesitas
 
-- La URL del proyecto Supabase (`https://<proyecto>.supabase.co`).
+- La URL del proyecto Supabase (`https://<proyecto>.supabase.co`), **sin `/rest/v1/` al final**:
+  si la copias de *Project Settings → Data API*, quítaselo (si no, la API responde 404).
 - La **clave publicable** de Supabase (*Project Settings → API Keys*). Es de solo lectura y los
   permisos de la base protegen los datos. Nunca uses la clave `service_role` ni la secreta.
 
