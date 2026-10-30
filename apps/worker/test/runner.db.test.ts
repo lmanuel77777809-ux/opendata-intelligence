@@ -18,8 +18,10 @@ describe.skipIf(!DB_URL)('worker + PostgreSQL (API simulada)', () => {
   let worker: pg.Pool;
   const fake: FakeWorldBank = syntheticScenario();
 
+  // Reloj sin esperas reales: límites de tasa y reintentos se resuelven al instante.
+  const clock = { now: () => Date.now(), sleep: async () => {} };
   const run = () =>
-    runDataset(worker, DATASET, { trigger: 'test', userAgent: 'odi-test', connectors, log: silent, fetchImpl: fake.fetch as typeof fetch });
+    runDataset(worker, DATASET, { trigger: 'test', userAgent: 'odi-test', connectors, log: silent, fetchImpl: fake.fetch as typeof fetch, clock });
   const one = async (sql: string, params: unknown[] = []) => (await admin.query(sql, params)).rows[0];
 
   const expectRun = (o: RunOutcome) => {
@@ -108,6 +110,20 @@ describe.skipIf(!DB_URL)('worker + PostgreSQL (API simulada)', () => {
     });
     expect(await one(`select count(*)::int as n from core.observation_revision`)).toEqual(before);
     delete fake.totalOffset['SP.DYN.LE00.IN'];
+  });
+
+  it('fallo pasajero (HTTP 400 en una página): se repite la descarga y la ejecución termina bien', async () => {
+    fake.failOnce = { match: (u) => u.pathname.includes('SP.DYN.LE00.IN') && u.searchParams.get('page') === '1' && u.searchParams.get('per_page') === '2', status: 400 };
+    const outcome = await run();
+    expect(outcome.status).toBe('success');
+    if (outcome.status === 'not_started') return;
+    expectRun(outcome);
+    expect(outcome.indicators.every((i) => i.ok)).toBe(true);
+    expect(await one(`select error_code, http_status, (detail->>'retried')::boolean as retried from ops.ingestion_error where run_id = $1`, [outcome.run.id])).toEqual({
+      error_code: 'http_error',
+      http_status: 400,
+      retried: true,
+    });
   });
 
   it('admisión denegada (403): no se abre ejecución y queda la evidencia', async () => {

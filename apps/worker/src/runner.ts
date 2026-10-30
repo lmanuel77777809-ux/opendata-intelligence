@@ -1,8 +1,12 @@
 import type pg from 'pg';
 import {
+  AuthRequiredError,
   ConnectorError,
+  HostNotAllowedError,
   HttpClient,
+  HttpError,
   IncompleteResponseError,
+  realClock,
   SchemaValidationError,
   type Clock,
   type Connector,
@@ -29,6 +33,10 @@ import {
 } from './repository.ts';
 
 export type ConnectorRegistry = Record<string, Connector<unknown>>;
+
+/** Intentos de descarga completa por indicador y espera entre ellos. */
+const INDICATOR_ATTEMPTS = 2;
+const INDICATOR_RETRY_DELAY_MS = 30_000;
 
 export interface RunOptions {
   trigger: 'schedule' | 'manual' | 'test';
@@ -76,6 +84,7 @@ export async function runDataset(db: pg.Pool, datasetCode: string, opts: RunOpti
     ...(opts.clock ? { clock: opts.clock } : {}),
   });
   const ctx: ConnectorContext = { http, log: opts.log };
+  const sleep = (opts.clock ?? realClock).sleep;
 
   // 1. Admisión: petición anónima real; se registra siempre, pase o no.
   const availability = await connector.checkAvailability(ctx, config);
@@ -122,22 +131,22 @@ export async function runDataset(db: pg.Pool, datasetCode: string, opts: RunOpti
     const geoMap = await loadGeoMap(db, ctxDb.sourceId);
     await flushRequests();
 
-    // 5. Datos, indicador por indicador.
+    // 5. Datos, indicador por indicador. La descarga completa se reintenta ante fallos
+    //    pasajeros; nada se escribe hasta tener todas las páginas.
     for (const [code, indicatorId] of indicatorIds) {
       try {
-        const fetch = connector.fetchIndicator(ctx, config, code);
-        const observations: NormalizedObservation[] = [];
-        const rejected: RejectedRecord[] = [];
-        let received = 0;
-        let nulls = 0;
-        let lastUpdated: string | null = null;
-        for await (const page of fetch.pages) {
-          observations.push(...page.observations);
-          rejected.push(...page.rejected);
-          received += page.received;
-          nulls += page.nulls;
-          lastUpdated = page.providerLastUpdated ?? lastUpdated;
+        let download: Download | undefined;
+        for (let attempt = 1; !download; attempt++) {
+          try {
+            download = await downloadIndicator(connector, ctx, config, code);
+          } catch (error) {
+            if (attempt >= INDICATOR_ATTEMPTS || !isTransient(error)) throw error;
+            await logError(db, runId, errorRecord(phaseOf(error), error, { indicator: code, attempt, retried: true }));
+            opts.log.warn('Fallo pasajero; se repite la descarga del indicador', { code, attempt, error: (error as Error).message });
+            await sleep(INDICATOR_RETRY_DELAY_MS);
+          }
         }
+        const { observations, rejected, received, nulls, lastUpdated, fullSnapshot } = download;
 
         const rows: Array<NormalizedObservation & { countryId: number | null; regionId: number | null }> = [];
         for (const o of observations) {
@@ -146,7 +155,7 @@ export async function runDataset(db: pg.Pool, datasetCode: string, opts: RunOpti
           else rows.push({ ...o, countryId: geo.countryId, regionId: geo.regionId });
         }
 
-        const merged = await stageAndMerge(db, runId, indicatorId, rows, fetch.fullSnapshot);
+        const merged = await stageAndMerge(db, runId, indicatorId, rows, fullSnapshot);
         await logRejected(db, runId, rejected);
         await addCounters(db, runId, { received, rejected: rejected.length, nulls });
         if (lastUpdated) await setIndicatorLastUpdated(db, indicatorId, lastUpdated);
@@ -173,6 +182,40 @@ export async function runDataset(db: pg.Pool, datasetCode: string, opts: RunOpti
   }
 }
 
+interface Download {
+  observations: NormalizedObservation[];
+  rejected: RejectedRecord[];
+  received: number;
+  nulls: number;
+  lastUpdated: string | null;
+  fullSnapshot: boolean;
+}
+
+async function downloadIndicator(connector: Connector<unknown>, ctx: ConnectorContext, config: unknown, code: string): Promise<Download> {
+  const fetch = connector.fetchIndicator(ctx, config, code);
+  const d: Download = { observations: [], rejected: [], received: 0, nulls: 0, lastUpdated: null, fullSnapshot: fetch.fullSnapshot };
+  for await (const page of fetch.pages) {
+    d.observations.push(...page.observations);
+    d.rejected.push(...page.rejected);
+    d.received += page.received;
+    d.nulls += page.nulls;
+    d.lastUpdated = page.providerLastUpdated ?? d.lastUpdated;
+  }
+  return d;
+}
+
+/**
+ * Fallos que merecen repetir la descarga completa del indicador: red, timeouts, respuestas
+ * incompletas y errores HTTP sueltos (incluido 400: el Banco Mundial ha devuelto 400 puntuales
+ * en páginas válidas). No se repiten exigencias de autenticación, hosts no permitidos ni
+ * cambios de esquema.
+ */
+function isTransient(error: unknown): boolean {
+  if (error instanceof AuthRequiredError || error instanceof HostNotAllowedError || error instanceof SchemaValidationError) return false;
+  if (error instanceof HttpError) return error.httpStatus !== 404;
+  return error instanceof ConnectorError && (error.retryable || error instanceof IncompleteResponseError);
+}
+
 function phaseOf(error: unknown): 'fetch' | 'validate' | 'store' {
   if (error instanceof SchemaValidationError) return 'validate';
   if (error instanceof ConnectorError || error instanceof IncompleteResponseError) return 'fetch';
@@ -187,7 +230,11 @@ function errorRecord(phase: string, error: unknown, extra?: Record<string, unkno
       message: error.message,
       httpStatus: error.httpStatus,
       url: error.url,
-      detail: { ...extra, ...(error instanceof SchemaValidationError ? { issues: error.issues } : {}) },
+      detail: {
+        ...extra,
+        ...(error instanceof SchemaValidationError ? { issues: error.issues } : {}),
+        ...(error instanceof HttpError ? { body: error.bodyExcerpt } : {}),
+      },
     };
   }
   return { phase, code: 'unexpected', message: error instanceof Error ? error.message : String(error), detail: extra };

@@ -40,6 +40,8 @@ export class FakeWorldBank {
   totalOffset: Record<string, number> = {};
   /** Fuerza un código HTTP para las URL que cumplan el predicado. */
   forceStatus: { match: (url: URL) => boolean; status: number } | null = null;
+  /** Igual, pero solo la primera vez (simula un fallo pasajero del proveedor). */
+  failOnce: { match: (url: URL) => boolean; status: number } | null = null;
 
   constructor(
     public countries: FakeCountry[],
@@ -50,6 +52,11 @@ export class FakeWorldBank {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     this.requests.push(url.toString());
     if (this.forceStatus?.match(url)) return new Response('{}', { status: this.forceStatus.status });
+    if (this.failOnce?.match(url)) {
+      const status = this.failOnce.status;
+      this.failOnce = null;
+      return new Response('{"error":"transient"}', { status });
+    }
     if (url.hostname !== 'api.worldbank.org') return new Response('not found', { status: 404 });
 
     const lang = url.pathname.startsWith('/v2/es/') ? 'es' : 'en';
